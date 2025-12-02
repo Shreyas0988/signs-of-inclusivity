@@ -11,3 +11,4 @@ flask_socketio==5.3.6
 mediapipe==0.10.14
 flask_socketio
 eventlet
+tensorflow
