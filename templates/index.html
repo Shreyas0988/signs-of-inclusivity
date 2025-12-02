@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Signs of Inclusivity</title>
+    <link rel="stylesheet" href="https://use.typekit.net/qtu0dlz.css" />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+  </head>
+  <body>
+    <h1 class="title">Signs of Inclusivity</h1>
+
+    <div class="tabContainer">
+      <div class="tabsList" role="tablist">
+        <button
+          class="tab"
+          role="tab"
+          aria-selected="false"
+          aria-controls="learning-panel"
+          id="learning-tab"
+          tabindex="-1"
+        >
+          Learning Mode
+        </button>
+        <button
+          class="tab active"
+          role="tab"
+          aria-selected="true"
+          aria-controls="translator-panel"
+          id="translator-tab"
+          tabindex="0"
+        >
+          Real-Time Translator
+        </button>
+        <span class="tabIndicator"></span>
+      </div>
+    </div>
+
+    <section
+      class="tabPanel"
+      id="learning-panel"
+      role="tabpanel"
+      aria-labelledby="learning-tab"
+    >
+      <p class="learningComponent" id="statsDisplay">
+        Your score (last 24 hours): Loading...
+      </p>
+
+      <p class="learningComponent">What sign is being shown?</p>
+
+      <video class="video learningComponent" id="quizVideo" playsinline autoplay loop muted></video>
+
+      <div class="inputWrapper learningComponent">
+        <input
+          class="inputControl"
+          id="answer"
+          type="text"
+          placeholder="Type keywords (e.g., ”you help”)"
+          autocomplete="off"
+        />
+        <button class="button" id="submitAnswer">Submit</button>
+        <button
+          class="button"
+          id="nextQuestion"
+          style="display: none"
+        >
+          Next Sign
+        </button>
+      </div>
+
+      <p class="learningText learningComponent" id="feedbackMessage"></p>
+    </section>
+
+    <section
+      class="tabPanel active"
+      id="translator-panel"
+      role="tabpanel"
+      aria-labelledby="translator-tab"
+    >
+      <video class="video" id="localVideo" autoplay playsinline muted></video>
+      
+      <div class="translation-output">
+        Predicted Sign: <span id="predictionText">Waiting for sign...</span>
+      </div>
+    </section>
+
+    <script src="{{ url_for('static', filename='tabs.js') }}"></script>
+    <script src="{{ url_for('static', filename='quiz.js') }}"></script>
+    
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script> 
+
+    <script>
+      const video = document.getElementById("localVideo"); 
+      const predictionTextEl = document.getElementById("predictionText"); 
+
+      const socket = io(); 
+
+      let frameBuffer = [];
+      const FRAME_BATCH_SIZE = 5; 
+      const CAPTURE_INTERVAL_MS = 100; 
+      
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      let captureInterval = null;
+      let videoStream = null;
+
+      socket.on('prediction', (label) => {
+          predictionTextEl.textContent = label.toUpperCase().replace(/_/g, ' ');
+      });
+
+      async function startCamera() {
+        if (videoStream || captureInterval) return;
+
+        try {
+            videoStream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false,
+            });
+            video.srcObject = videoStream;
+            
+            video.onloadedmetadata = () => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                captureInterval = setInterval(captureAndSendFrame, CAPTURE_INTERVAL_MS);
+                console.log("Camera stream started.");
+            };
+        } catch (err) {
+            console.error("Error accessing camera:", err);
+            predictionTextEl.textContent = "Error: Camera access denied or failed. Check permissions.";
+        }
+      }
+
+      function stopCamera() {
+        if (captureInterval) {
+            clearInterval(captureInterval);
+            captureInterval = null;
+        }
+        if (videoStream) {
+            videoStream.getTracks().forEach(track => track.stop());
+            videoStream = null;
+        }
+        video.srcObject = null;
+        predictionTextEl.textContent = "Waiting for sign...";
+        frameBuffer = [];
+        console.log("Camera stream stopped.");
+      }
+            
+      function captureAndSendFrame() {
+          if(video.videoWidth === 0 || video.videoHeight === 0 || !socket.connected) {
+              return;
+          }
+
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+          let base64 = canvas.toDataURL("image/jpeg", 0.7).split(",")[1];
+          frameBuffer.push(base64);
+
+          if(frameBuffer.length >= FRAME_BATCH_SIZE){
+              if(socket.connected) {
+                  socket.emit('stream_frames', {frames: frameBuffer});
+              }
+              frameBuffer = [];
+          }
+      }
+
+      const translatorPanel = document.getElementById("translator-panel"); 
+
+      const observer = new MutationObserver(() => {
+          const isActive = translatorPanel.classList.contains("active"); 
+          
+          if (isActive) {
+              startCamera();
+          } else {
+              stopCamera();
+          }
+      });
+
+      observer.observe(translatorPanel, {
+          attributes: true,
+          attributeFilter: ["class"],
+      });
+
+      if (translatorPanel.classList.contains("active")) {
+          startCamera();
+      }
+    </script>
+  </body>
+</html>
