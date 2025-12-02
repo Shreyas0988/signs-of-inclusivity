@@ -1,0 +1,7 @@
+[
+  { "text": "I don’t know", "keywords": ["know"] },
+  { "text": "I need more time.", "keywords": ["need", "time"] },
+  { "text": "Is this correct?", "keywords": ["correct"] },
+  { "text": "What is the homework?", "keywords": ["homework"] },
+  { "text": "What page?", "keywords": ["page"] }
+]
